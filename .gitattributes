@@ -1,0 +1,2 @@
+# HPC shell scripts must keep Unix (LF) line endings
+*.sh text eol=lf

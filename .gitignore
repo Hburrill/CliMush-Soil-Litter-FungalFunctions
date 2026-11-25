@@ -1,0 +1,19 @@
+# Code-only repo: ignore everything, then allow code files back in.
+# Data, outputs and model files stay in Dropbox (many are >2 GB; GitHub's limit is 100 MB).
+*
+!*/
+!.gitignore
+!.gitattributes
+!*.R
+!*.Rmd
+!*.sh
+!*.Rproj
+!README.md
+
+# Old script versions (git history replaces these)
+backup/
+
+# RStudio / Dropbox clutter
+.Rproj.user/
+.Rhistory
+*conflicted copy*
