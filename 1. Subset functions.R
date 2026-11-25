@@ -345,14 +345,23 @@ outputecto$Sample <- d # now you have a dataframe with sample ID as one column a
 metadata8 <- left_join(metadata7, outputecto, by=c("OTU_ID" = "Sample"))
 
 ## pyrofiles ----
-pyrosp <- pyrolist$Pyrophilous_Species
+pyrosp <- trimws(pyrolist$Pyrophilous_Species)
+
+# Fix spellings in the pyrophilous list so they match the names in the sequence data
+# (list spelling = data spelling). Without this, these OTUs were missed (25 OTUs total).
+spelling_fixes <- c("Coprinellus micaceous"  = "Coprinellus micaceus",    # 5 OTUs
+                    "Geopyxis rehmi"         = "Geopyxis rehmii",         # 18 OTUs
+                    "Pyronema omphaloides"   = "Pyronema omphalodes",     # 1 OTU
+                    "Rasamsonia columbensis" = "Rasamsonia columbiensis") # 1 OTU
+fix <- pyrosp %in% names(spelling_fixes)
+pyrosp[fix] <- spelling_fixes[pyrosp[fix]]
 
 # match with species
 # Only the genus/species columns are needed, so read just those (the full file is ~2.5 GB)
 SL_full <- fread("output/CliMush_SLfung_gensp.csv", select = c("genus", "gensp"), data.table = FALSE)
 head(SL_full)
 SL_full$pyro_present <- SL_full$gensp %in% pyrosp
-SL_full %>% count(pyro_present) # 5889
+SL_full %>% count(pyro_present) # 5914 with spelling fixes (5889 before)
 
 # This file has no shared OTU ID with SL_FT, so rows are matched by position.
 # Stop if the two files are out of sync rather than silently mislabeling taxa.
@@ -392,7 +401,7 @@ metadata9 <- left_join(metadata8, outputpyro, by=c("OTU_ID" = "Sample"))
 # to test whether overall pyrophile trends hold for these core groups.
 pyro_genera <- c("Pyronema", "Neurospora", "Geopyxis")
 SL_FT$pyro_subset <- ifelse(SL_FT$pyro=="1" & SL_FT$genus %in% pyro_genera, "1", "0")
-sum(SL_FT$pyro_subset=="1") # 24 OTUs (P. domesticum, N. crassa, G. majalis/alpina/carbonaria)
+sum(SL_FT$pyro_subset=="1") # 43 OTUs (P. domesticum/omphalodes, N. crassa, G. rehmii/majalis/alpina/carbonaria)
 
 d <- sample_cols
 n<-length(d)
