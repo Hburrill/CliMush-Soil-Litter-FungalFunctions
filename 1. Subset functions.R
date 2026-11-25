@@ -1,14 +1,20 @@
 # Subset functional groups ----
 library(vegan)
 library(dplyr)
+library(data.table) # fread/fwrite: much faster and lighter on memory than read.csv/write.csv
 
+# Run from the Analyses folder (open Analyses.Rproj, or the HPC script cd's there).
+# Paths are relative to it, so there's no setwd() and the script can be re-run in the same session.
 pyrolist <- read.csv("raw/Pyrophilous_list-SL19Mar25.csv", head=T)
-setwd("./output/")
 
 # read in SL_FT & metadata
-SL_FT <- read.csv("CliMush_SL_otuFT.csv", head=T, sep=",")
-head(SL_FT)
+SL_FT <- fread("output/CliMush_SL_otuFT.csv", data.table = FALSE, check.names = TRUE)
+head(SL_FT[, c(1:3, (ncol(SL_FT)-21):ncol(SL_FT))])
 SL_FT <- SL_FT[,-1]
+
+# Sample columns, picked by name so this keeps working if samples are added/removed
+sample_cols <- grep("^illumina_", names(SL_FT), value = TRUE)
+length(sample_cols) # 1508 as of Nov 2026
 
 # how many total ASVs?
 # 821317
@@ -24,22 +30,21 @@ sum(SL_FT$primary_lifestyle == "ectomycorrhizal", na.rm = TRUE) # 28521
 
 
 ## subset for tests
-SL_FT2 <- mutate_all(SL_FT, function(x) as.numeric(as.character(x)))
-SL_FT2 <- SL_FT2[which(SL_FT2$confidence>=0.9),]
-SL_FT3 <- SL_FT2[,-c(1,1509:1543)]
-otu.table.filter <- SL_FT3[,colSums(SL_FT3)>10]
-#SL_FT <- SL_FT[-c(20000:821300),]
+# Commented out: mutate_all() makes a full numeric copy of the table (~10 GB), which
+# doesn't fit in a laptop's memory, and otu.table.filter isn't used later in this script.
+# SL_FT2 <- SL_FT[which(SL_FT$confidence>=0.9), sample_cols]
+# otu.table.filter <- SL_FT2[,colSums(SL_FT2)>10]
 
-metadata <- read.csv("CliMush-SoilLitter-metadata-25Feb25.csv", head=T, sep=",")
+metadata <- read.csv("output/CliMush-SoilLitter-metadata-25Feb25.csv", head=T, sep=",")
 
 ## allfung ----
-## calculate relative abundance of pathogens/sample
-SL_asv <- SL_FT[,-c(1509:1544)]
-
-# Select numeric sample columns
-d <- colnames(SL_asv[, sapply(SL_asv, is.numeric)])
+d <- sample_cols
 n <- length(d)
 
+# Total reads across all samples: computed once, one column at a time (sum() on the whole
+# data frame inside the loop copied the full table on every pass)
+total_reads <- sum(vapply(SL_FT[d], function(x) as.numeric(sum(x, na.rm = TRUE)), numeric(1)))
+
 # Prepare output data frame
 columns <- c("Sample", "fungrel_ab", "fungdiv", "fungrich")
 outputfung <- data.frame(matrix(nrow = n, ncol = length(columns)))
@@ -48,39 +53,11 @@ colnames(outputfung) <- columns
 # Loop through each sample
 for (i in 1:n) {
   sample_name <- d[i]
-  total_fungi <- sum(SL_asv[, sample_name], na.rm = TRUE)
-  total_reads <- sum(SL_asv, na.rm = TRUE)
+  total_fungi <- sum(SL_FT[, sample_name], na.rm = TRUE)
   rel_ab <- total_fungi / total_reads
-  div_val <- diversity(SL_asv[, sample_name])
-  rich_val <- specnumber(SL_asv[, sample_name])
-  
-  # Store results
-  outputfung$Sample[i]    <- sample_name
-  outputfung$fungrel_ab[i] <- rel_ab
-  outputfung$fungdiv[i]    <- div_val
-  outputfung$fungrich[i]   <- rich_val
-}
+  div_val <- vegan::diversity(SL_FT[, sample_name])
+  rich_val <- vegan::specnumber(SL_FT[, sample_name])
 
-# REVISED CODE
-# Prepare output data frame
-columns <- c("Sample", "fungrel_ab", "fungdiv", "fungrich")
-
-outputfung <- data.frame(matrix(nrow = n, ncol = length(columns)))
-colnames(outputfung) <- columns
-
-# Loop through each sample
-for (i in 1:n) {
-  
-  sample_name <- d[i]
-  
-  total_fungi <- sum(SL_asv[, sample_name], na.rm = TRUE)
-  total_reads <- sum(SL_asv, na.rm = TRUE)
-  
-  rel_ab <- total_fungi / total_reads
-  
-  div_val <- vegan::diversity(SL_asv[, sample_name])
-  rich_val <- vegan::specnumber(SL_asv[, sample_name])
-  
   # Store results
   outputfung$Sample[i]    <- sample_name
   outputfung$fungrel_ab[i] <- rel_ab
@@ -98,7 +75,7 @@ SL_FT$ppath1 <- ifelse(SL_FT$primary_lifestyle=="plant_pathogen", "1", "0")
 SL_FT$ppath2 <- ifelse(SL_FT$primary_lifestyle=="plant_pathogen" | SL_FT$Secondary_lifestyle=="plant_pathogen", "1", "0")
 
 ## calculate relative abundance of pathogens/sample
-d <- colnames(SL_FT[,sapply(SL_FT, is.numeric)])
+d <- sample_cols
 n<-length(d)
 columns = c("pprel_ab1","ppdiv1","pprich1","pprel_ab2","ppdiv2","pprich2") 
 outputpath = data.frame(matrix(nrow = n, ncol = length(columns)))
@@ -141,10 +118,10 @@ SL_FT$allsaps2 <- ifelse(SL_FT$primary_lifestyle=="dung_saprotroph" | SL_FT$prim
 
 
 ## calculate relative abundance of pathogens/sample
-d <- colnames(SL_FT[,sapply(SL_FT, is.numeric)])
-p<-length(d)
+d <- sample_cols
+n<-length(d)
 columns = c("allsaps_ab1","allsapsdiv1","allsapsrich1","allsaps_ab2","allsapsdiv2","allsapsrich2") 
-outputallsaps = data.frame(matrix(nrow = p, ncol = length(columns)))
+outputallsaps = data.frame(matrix(nrow = n, ncol = length(columns)))
 colnames(outputallsaps) = columns
 
 for(i in 1:n){
@@ -182,10 +159,10 @@ SL_FT$dungsap1 <- ifelse(SL_FT$primary_lifestyle=="dung_saprotroph", "1", "0")
 SL_FT$dungsap2 <- ifelse(SL_FT$primary_lifestyle=="dung_saprotroph"| SL_FT$Secondary_lifestyle=="dung_saprotroph", "1", "0")
 
 ## calculate relative abundance of pathogens/sample
-d <- colnames(SL_FT[,sapply(SL_FT, is.numeric)])
-p<-length(d)
+d <- sample_cols
+n<-length(d)
 columns = c("dungsaprel_ab1","dungsapdiv1","dungsaprich1","dungsaprel_ab2","dungsapdiv2","dungsaprich2") 
-outputdungsap = data.frame(matrix(nrow = p, ncol = length(columns)))
+outputdungsap = data.frame(matrix(nrow = n, ncol = length(columns)))
 colnames(outputdungsap) = columns
 
 for(i in 1:n){
@@ -223,10 +200,10 @@ SL_FT$litsap1 <- ifelse(SL_FT$primary_lifestyle=="litter_saprotroph", "1", "0")
 SL_FT$litsap2 <- ifelse(SL_FT$primary_lifestyle=="litter_saprotroph"| SL_FT$Secondary_lifestyle=="litter_saprotroph", "1", "0")
 
 ## calculate relative abundance of pathogens/sample
-d <- colnames(SL_FT[,sapply(SL_FT, is.numeric)])
-p<-length(d)
+d <- sample_cols
+n<-length(d)
 columns = c("litsaprel_ab1","litsapdiv1","litsaprich1","litsaprel_ab2","litsapdiv2","litsaprich2") 
-outputlitsap = data.frame(matrix(nrow = p, ncol = length(columns)))
+outputlitsap = data.frame(matrix(nrow = n, ncol = length(columns)))
 colnames(outputlitsap) = columns
 
 for(i in 1:n){
@@ -264,10 +241,10 @@ SL_FT$soilsap1 <- ifelse(SL_FT$primary_lifestyle=="soil_saprotroph", "1", "0")
 SL_FT$soilsap2 <- ifelse(SL_FT$primary_lifestyle=="soil_saprotroph" | SL_FT$Secondary_lifestyle=="soil_saprotroph", "1", "0")
 
 ## calculate relative abundance of pathogens/sample
-d <- colnames(SL_FT[,sapply(SL_FT, is.numeric)])
-p<-length(d)
+d <- sample_cols
+n<-length(d)
 columns = c("soilsaprel_ab1","soilsapdiv1","soilsaprich1","soilsaprel_ab2","soilsapdiv2","soilsaprich2") 
-outputsoilsap = data.frame(matrix(nrow = p, ncol = length(columns)))
+outputsoilsap = data.frame(matrix(nrow = n, ncol = length(columns)))
 colnames(outputsoilsap) = columns
 
 for(i in 1:n){
@@ -305,10 +282,10 @@ SL_FT$woodsap1 <- ifelse(SL_FT$primary_lifestyle=="wood_saprotroph", "1", "0")
 SL_FT$woodsap2 <- ifelse(SL_FT$primary_lifestyle=="wood_saprotroph" | SL_FT$Secondary_lifestyle=="wood_saprotroph", "1", "0")
 
 ## calculate relative abundance of pathogens/sample
-d <- colnames(SL_FT[,sapply(SL_FT, is.numeric)])
-p<-length(d)
+d <- sample_cols
+n<-length(d)
 columns = c("woodsaprel_ab1","woodsapdiv1","woodsaprich1","woodsaprel_ab2","woodsapdiv2","woodsaprich2") 
-outputwoodsap = data.frame(matrix(nrow = p, ncol = length(columns)))
+outputwoodsap = data.frame(matrix(nrow = n, ncol = length(columns)))
 colnames(outputwoodsap) = columns
 
 for(i in 1:n){
@@ -344,7 +321,7 @@ metadata7 <- left_join(metadata6, outputwoodsap, by=c("OTU_ID" = "Sample"))
 ## ectomycorrhizae ----
 SL_FT$ecto <- ifelse(SL_FT$primary_lifestyle=="ectomycorrhizal", "1", "0")
 
-d <- colnames(SL_FT[,sapply(SL_FT, is.numeric)])
+d <- sample_cols
 n<-length(d)
 columns = c("ectorel_ab","ectodiv","ectorich") 
 outputecto = data.frame(matrix(nrow = n, ncol = length(columns)))
@@ -371,17 +348,23 @@ metadata8 <- left_join(metadata7, outputecto, by=c("OTU_ID" = "Sample"))
 pyrosp <- pyrolist$Pyrophilous_Species
 
 # match with species
-SL_full <-read.csv("CliMush_SLfung_gensp.csv", header=T)
+# Only the genus/species columns are needed, so read just those (the full file is ~2.5 GB)
+SL_full <- fread("output/CliMush_SLfung_gensp.csv", select = c("genus", "gensp"), data.table = FALSE)
 head(SL_full)
 SL_full$pyro_present <- SL_full$gensp %in% pyrosp
 SL_full %>% count(pyro_present) # 5889
+
+# This file has no shared OTU ID with SL_FT, so rows are matched by position.
+# Stop if the two files are out of sync rather than silently mislabeling taxa.
+stopifnot(nrow(SL_full) == nrow(SL_FT),
+          identical(as.character(SL_full$genus), as.character(SL_FT$genus)))
 
 SL_FT$pyro <- ifelse(SL_full$pyro_present=="TRUE", "1", "0")
 # pyro?
 
 
 ## calculate relative abundance of pathogens/sample
-d <- colnames(SL_FT[,sapply(SL_FT, is.numeric)])
+d <- sample_cols
 n<-length(d)
 columns = c("pyrorel_ab","pyrodiv","pyrorich") 
 outputpyro = data.frame(matrix(nrow = n, ncol = length(columns)))
@@ -405,5 +388,6 @@ outputpyro$Sample <- d # now you have a dataframe with sample ID as one column a
 metadata9 <- left_join(metadata8, outputpyro, by=c("OTU_ID" = "Sample"))
 
 # export data ----
-write.csv(metadata9, "CliMush-SoilLitter-metaWfunctions_13Aug25.csv")
-write.csv(SL_FT, "CliMush_SL_otu_functions1.csv")
+write.csv(metadata9, "output/CliMush-SoilLitter-metaWfunctions_13Aug25.csv")
+# fwrite is far faster for this ~2.6 GB table; row.names=TRUE keeps the same layout as write.csv
+fwrite(SL_FT, "output/CliMush_SL_otu_functions1.csv", row.names = TRUE)
