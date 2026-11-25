@@ -388,6 +388,6 @@ outputpyro$Sample <- d # now you have a dataframe with sample ID as one column a
 metadata9 <- left_join(metadata8, outputpyro, by=c("OTU_ID" = "Sample"))
 
 # export data ----
-write.csv(metadata9, "output/CliMush-SoilLitter-metaWfunctions_13Aug25.csv")
+write.csv(metadata9, "output/CliMush-SoilLitter-metaWfunctions_24Nov26.csv")
 # fwrite is far faster for this ~2.6 GB table; row.names=TRUE keeps the same layout as write.csv
-fwrite(SL_FT, "output/CliMush_SL_otu_functions1.csv", row.names = TRUE)
+fwrite(SL_FT, "output/CliMush_SL_otu_functions_24Nov26.csv", row.names = TRUE)
