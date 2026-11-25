@@ -387,7 +387,37 @@ outputpyro$Sample <- d # now you have a dataframe with sample ID as one column a
 
 metadata9 <- left_join(metadata8, outputpyro, by=c("OTU_ID" = "Sample"))
 
+## pyro_subset ----
+# Listed pyrophiles (pyro == 1) in the genera Pyronema, Neurospora and Geopyxis only,
+# to test whether overall pyrophile trends hold for these core groups.
+pyro_genera <- c("Pyronema", "Neurospora", "Geopyxis")
+SL_FT$pyro_subset <- ifelse(SL_FT$pyro=="1" & SL_FT$genus %in% pyro_genera, "1", "0")
+sum(SL_FT$pyro_subset=="1") # 24 OTUs (P. domesticum, N. crassa, G. majalis/alpina/carbonaria)
+
+d <- sample_cols
+n<-length(d)
+columns = c("pyrosubrel_ab","pyrosubdiv","pyrosubrich")
+outputpyrosub = data.frame(matrix(nrow = n, ncol = length(columns)))
+colnames(outputpyrosub) = columns
+
+for(i in 1:n){
+  s <- sum(SL_FT[which(SL_FT$pyro_subset=="1"), d[i]])/sum(SL_FT[,d[i]])
+  df <- as.data.frame(s)
+  outputpyrosub$pyrosubrel_ab[i] <- df[[1]]}
+for(i in 1:n){
+  s <- diversity(SL_FT[which(SL_FT$pyro_subset=="1"), d[i]])
+  df <- as.data.frame(s)
+  outputpyrosub$pyrosubdiv[i] <- df[[1]]}
+for(i in 1:n){
+  s <- specnumber(SL_FT[which(SL_FT$pyro_subset=="1"), d[i]])
+  df <- as.data.frame(s)
+  outputpyrosub$pyrosubrich[i] <- df[[1]]}
+
+outputpyrosub$Sample <- d
+
+metadata10 <- left_join(metadata9, outputpyrosub, by=c("OTU_ID" = "Sample"))
+
 # export data ----
-write.csv(metadata9, "output/CliMush-SoilLitter-metaWfunctions_24Nov26.csv")
+write.csv(metadata10, "output/CliMush-SoilLitter-metaWfunctions_24Nov26.csv")
 # fwrite is far faster for this ~2.6 GB table; row.names=TRUE keeps the same layout as write.csv
 fwrite(SL_FT, "output/CliMush_SL_otu_functions_24Nov26.csv", row.names = TRUE)
